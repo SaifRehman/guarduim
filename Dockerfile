@@ -1,29 +1,32 @@
-# Use an image with the required glibc version
-FROM golang:1.18-buster AS builder
+# Use Go base image
+FROM golang:1.23 as builder
 
-# Set the working directory
+# Set the Current Working Directory inside the container
 WORKDIR /app
 
-# Copy the Go module files
-COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod tidy
-
-# Copy the source code
+# Copy the source code into the container
 COPY . .
 
-# Build the Go binary
+# Build the Go app without running go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
 
-# Use a compatible image for the runtime (e.g., debian:bullseye)
+# Start a new stage from scratch
 FROM debian:bullseye-slim
 
-# Copy the built binary from the builder stage
-COPY --from=builder /app/guarduim-controller /usr/local/bin/guarduim-controller
+# Install necessary packages
+RUN apt-get update && apt-get install -y ca-certificates
 
-# Set the entrypoint for the container
-ENTRYPOINT ["/usr/local/bin/guarduim-controller"]
+# Set the Current Working Directory inside the container
+WORKDIR /root/
 
-# Specify the port your application will listen on (if applicable)
+# Copy the Pre-built binary file from the previous stage
+COPY --from=builder /app/guarduim-controller .
+
+# Expose the port the app runs on (if necessary)
 EXPOSE 8080
+RUN chmod +x guarduim-controller
+
+
+# Command to run the executable
+CMD ["./guarduim-controller"]
