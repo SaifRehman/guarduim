@@ -141,21 +141,29 @@ func updateGuarduimFailures(guarduim Guarduim) {
 	// Increment the failures count
 	guarduim.Spec.Failures++
 
-	// Update the failures field in the status section of the resource
 	if existingGuarduim.Object["status"] == nil {
 		existingGuarduim.Object["status"] = make(map[string]interface{})
 	}
-	existingGuarduim.Object["status"].(map[string]interface{})["failures"] = guarduim.Spec.Failures
 
-	// Log the updated status before applying the changes
-	log.Printf("Updated status: %+v", existingGuarduim.Object["status"])
+	// Initialize failures in status if it's missing
+	status := existingGuarduim.Object["status"].(map[string]interface{})
+	if status["failures"] == nil {
+		status["failures"] = 0 // Set initial value for failures if it's not set
+	}
 
-	// Use UpdateStatus to update only the status field (do not modify spec)
+	// Increment the failure count
+	failures := status["failures"].(int) + 1
+	status["failures"] = failures
+
+	// Optionally, set additional fields like isBlocked or failedAttempts
+	status["isBlocked"] = failures >= guarduim.Spec.Threshold
+
+	// Update the status
 	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
-		log.Printf("Successfully updated Guarduim status: User=%s with Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
+		log.Printf("Successfully updated Guarduim status: User=%s with Failures=%d\n", guarduim.Spec.Username, failures)
 	}
 }
 

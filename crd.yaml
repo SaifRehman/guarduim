@@ -26,12 +26,12 @@ spec:
                   type: string
                 threshold:
                   type: integer
-                failures:
-                  type: integer
             status:
               type: object
               properties:
                 isBlocked:
                   type: boolean
+                failures:
+                  type: integer
                 failedAttempts:
                   type: integer
