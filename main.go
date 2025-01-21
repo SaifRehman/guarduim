@@ -148,11 +148,14 @@ func updateGuarduimFailures(guarduim Guarduim) {
 
 	// Update the status with the incremented failure count
 	existingGuarduim.Object["status"] = status
+	log.Printf("Current status: %+v", existingGuarduim.Object["status"])
 
 	log.Printf("Updating Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, newFailures)
 	log.Printf("Existing Guarduim: %+v", existingGuarduim)
 
 	// Apply the update to the status field (not spec)
+	existingGuarduim.Object["status"].(map[string]interface{})["failures"] = guarduim.Spec.Failures
+
 	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
