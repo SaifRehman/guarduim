@@ -1,14 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,7 +38,7 @@ type GuarduimSpec struct {
 
 type GuarduimStatus struct {
 	IsBlocked      bool `json:"isBlocked,omitempty"`
-	FailedAttempts int  `json:"failedAttempts,omitempty"` // Only track failed attempts now
+	FailedAttempts int  `json:"failedAttempts,omitempty"` // Track failed attempts
 }
 
 type Guarduim struct {
@@ -78,11 +79,73 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
+	// Start the informer in a separate goroutine
 	go informer.Run(stopCh)
+
+	// Periodically check for audit log entries
+	go func() {
+		ticker := time.NewTicker(5 * time.Second) // Set to 30 seconds or any other interval
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				log.Println("Checking audit logs for authentication failures...")
+				auditLog := fetchAuditLog()
+
+				// Parse and process audit log
+				for _, logEntry := range auditLog {
+					processLogEntry(logEntry)
+				}
+			}
+		}
+	}()
+
 	log.Println("Guarduim controller is running...")
 
 	<-sigCh
 	log.Println("Shutting down Guarduim controller")
+}
+
+func processLogEntry(logEntry string) {
+	// Parse log entry and find denied login attempts for specific users
+	// For simplicity, assuming a specific log format
+	if strings.Contains(logEntry, `"decision":"deny"`) {
+		username := extractUsernameFromLog(logEntry)
+		if username != "" {
+			guarduim := Guarduim{
+				Spec: GuarduimSpec{
+					Username: username,
+				},
+			}
+
+			// Fetch and update Guarduim resource
+			updateGuarduimFailures(guarduim)
+
+			// Block user if exceeded threshold
+			if guarduim.Status.FailedAttempts >= guarduim.Spec.Threshold {
+				namespace, err := getNamespace()
+				if err != nil {
+					log.Printf("Error getting namespace: %v", err)
+					return
+				}
+				blockUser(guarduim.Spec.Username, namespace)
+			}
+		}
+	}
+}
+
+func extractUsernameFromLog(logEntry string) string {
+	// Extract the username from the log entry (customize based on actual log format)
+	// This assumes the log entry contains `"user":"username"`
+	if strings.Contains(logEntry, `"user":`) {
+		start := strings.Index(logEntry, `"user":`) + len(`"user":`)
+		end := strings.Index(logEntry[start:], `,`) + start
+		username := logEntry[start:end]
+		username = strings.Trim(username, `"`)
+		return username
+	}
+	return ""
 }
 
 func updateGuarduimFailures(guarduim Guarduim) {
@@ -107,14 +170,10 @@ func updateGuarduimFailures(guarduim Guarduim) {
 		status = make(map[string]interface{})
 	}
 
-	// Get the current failedAttempts value (default to 0 if not set)
-	currentAttempts, ok := status["failedAttempts"].(int)
-	if !ok {
-		currentAttempts = 0
-	}
+	log.Printf("status: %v", status)
 
-	// Increment failedAttempts manually
-	status["failedAttempts"] = currentAttempts + 1
+	// Update failedAttempts count
+	status["failedAttempts"] = guarduim.Status.FailedAttempts
 
 	// Apply status update
 	existingGuarduim.Object["status"] = status
@@ -122,7 +181,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
-		log.Printf("Successfully updated Guarduim status: %s with failedAttempts=%d\n", guarduim.Spec.Username, status["failedAttempts"])
+		log.Printf("Successfully updated Guarduim status: %s with failedAttempts=%d\n", guarduim.Spec.Username, guarduim.Status.FailedAttempts)
 	}
 }
 
@@ -175,46 +234,66 @@ func handleEvent(obj interface{}) {
 }
 
 func handleFailureEvent(oldObj, newObj interface{}) {
-	oldUnstructured, okOld := oldObj.(*unstructured.Unstructured)
-	newUnstructured, okNew := newObj.(*unstructured.Unstructured)
-
-	if !okOld || !okNew {
-		log.Println("Could not convert event objects to Unstructured")
+	// Convert to unstructured
+	newUnstructuredObj, ok := newObj.(*unstructured.Unstructured)
+	if !ok {
+		log.Println("Failed to convert newObj to Unstructured")
 		return
 	}
 
-	// Convert to structured Guarduim
-	var oldGuarduim, newGuarduim Guarduim
-
-	oldData, _ := json.Marshal(oldUnstructured.Object)
-	json.Unmarshal(oldData, &oldGuarduim)
-
-	newData, _ := json.Marshal(newUnstructured.Object)
-	json.Unmarshal(newData, &newGuarduim)
-
-	// Log the event
-	log.Printf("User: %s, Old Failures: %d, New Failures: %d\n",
-		newGuarduim.Spec.Username, oldGuarduim.Status.FailedAttempts, newGuarduim.Status.FailedAttempts)
-
-	// Detect authentication failure (when failures increase)
-	if newGuarduim.Status.FailedAttempts > oldGuarduim.Status.FailedAttempts {
-		log.Printf("Authentication failed for user %s. Current Failures: %d/%d\n",
-			newGuarduim.Spec.Username, newGuarduim.Status.FailedAttempts, newGuarduim.Spec.Threshold)
-
-		// Increment the failure count
-		newGuarduim.Status.FailedAttempts++
-		log.Printf("Incrementing failure count for user %s: New Failures=%d\n",
-			newGuarduim.Spec.Username, newGuarduim.Status.FailedAttempts)
-
-		// Update the Guarduim CR to persist the new failure count
-		updateGuarduimFailures(newGuarduim)
+	// Extract username from Guarduim resource
+	data, err := json.Marshal(newUnstructuredObj.Object)
+	if err != nil {
+		log.Printf("Error marshaling object: %v", err)
+		return
 	}
 
-	// Check if failures exceed the threshold
-	if newGuarduim.Status.FailedAttempts >= newGuarduim.Spec.Threshold {
-		log.Printf("User %s exceeded failure threshold. Blocking user...\n", newGuarduim.Spec.Username)
-		blockUser(newGuarduim.Spec.Username, newGuarduim.Namespace)
+	var guarduim Guarduim
+	err = json.Unmarshal(data, &guarduim)
+	if err != nil {
+		log.Printf("Error unmarshalling object: %v", err)
+		return
 	}
+
+	// Fetch the audit log to find failed authentication attempts
+	auditLog := fetchAuditLog()
+
+	// Parse the audit log for deny events related to the user
+	for _, logEntry := range auditLog {
+		if strings.Contains(logEntry, guarduim.Spec.Username) && strings.Contains(logEntry, `"decision":"deny"`) {
+			// Increment the failed attempts count if a deny decision is found
+			guarduim.Status.FailedAttempts++
+			log.Printf("Incrementing failedAttempts for user: %s, New FailedAttempts: %d\n", guarduim.Spec.Username, guarduim.Status.FailedAttempts)
+
+			// Update Guarduim resource with the new failedAttempts count
+			updateGuarduimFailures(guarduim)
+
+			// Check if failed attempts exceed the threshold, then block the user
+			if guarduim.Status.FailedAttempts >= guarduim.Spec.Threshold {
+				namespace, err := getNamespace()
+				if err != nil {
+					log.Printf("Error getting namespace: %v", err)
+					return
+				}
+				blockUser(guarduim.Spec.Username, namespace)
+			}
+		}
+	}
+}
+
+// fetchAuditLog simulates fetching the audit log file from the OpenShift cluster
+func fetchAuditLog() []string {
+	// Execute the command to fetch the audit log
+	cmd := exec.Command("oc", "adm", "node-logs", "--role=master", "--path=oauth-server/audit.log")
+	stdout, err := cmd.Output()
+	if err != nil {
+		log.Printf("Error fetching audit log: %v", err)
+		return nil
+	}
+
+	// Split the log output into lines
+	logLines := strings.Split(string(stdout), "\n")
+	return logLines
 }
 
 func blockUser(username, namespace string) {
@@ -247,34 +326,12 @@ func blockUser(username, namespace string) {
 	// Update the resource
 	_, err = resource.UpdateStatus(context.TODO(), guarduim, metav1.UpdateOptions{})
 	if err != nil {
-		log.Printf("Error updating Guarduim status: %v", err)
-		return
+		log.Printf("Error updating user block status: %v", err)
 	}
-
-	log.Printf("User %s has been blocked.\n", username)
 }
 
-// getNamespace retrieves the namespace where the controller is running
 func getNamespace() (string, error) {
-	// The namespace is stored in this file in Kubernetes
-	namespaceFile := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-	file, err := os.Open(namespaceFile)
-	if err != nil {
-		return "", fmt.Errorf("could not open namespace file: %v", err)
-	}
-	defer file.Close()
-
-	// Read the namespace from the file
-	scanner := bufio.NewScanner(file)
-	if scanner.Scan() {
-		namespace := scanner.Text()
-		log.Printf("Fetched namespace: %s\n", namespace) // Log to verify
-		return namespace, nil
-	}
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading namespace file: %v", err)
-	}
-
-	// Return error if we couldn't read the namespace
-	return "", fmt.Errorf("namespace not found")
+	// Assume the namespace is 'default' for now
+	// You can dynamically fetch namespace if required using Kubernetes APIs
+	return "default", nil
 }
