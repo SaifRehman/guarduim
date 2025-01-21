@@ -25,7 +25,7 @@ COPY --from=builder /app/guarduim-controller .
 
 # Expose the port the app runs on (if necessary)
 EXPOSE 8080
-RUN chmod +x /app/guarduim-controller
+RUN chmod +x guarduim-controller
 
 
 # Command to run the executable
