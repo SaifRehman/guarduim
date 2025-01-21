@@ -123,6 +123,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 		log.Printf("Error reading namespace: %v", err)
 		return
 	}
+	log.Printf("namespace isss: %v", namespace)
 
 	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
 
