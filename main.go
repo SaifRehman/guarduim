@@ -104,8 +104,46 @@ func handleEvent(obj interface{}) {
 	log.Printf("Processing Guarduim: User=%s, Failures=%d/%d\n",
 		guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
 
+	// Increment failure count
+	guarduim.Spec.Failures++
+
+	// Update the Guarduim resource with the incremented failures count
+	updateGuarduimFailures(guarduim)
+
+	// Block user if failures exceed threshold
 	if guarduim.Spec.Failures >= guarduim.Spec.Threshold {
 		blockUser(guarduim.Spec.Username)
+	}
+}
+func updateGuarduimFailures(guarduim Guarduim) {
+	// Read the namespace dynamically
+	namespace, err := getNamespace()
+	if err != nil {
+		log.Printf("Error reading namespace: %v", err)
+		return
+	}
+
+	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
+
+	// Fetch the existing resource
+	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Metadata.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error fetching Guarduim resource: %v", err)
+		return
+	}
+
+	// Update the failures count
+	if existingGuarduim.Object["spec"] == nil {
+		existingGuarduim.Object["spec"] = make(map[string]interface{})
+	}
+	existingGuarduim.Object["spec"].(map[string]interface{})["failures"] = guarduim.Spec.Failures
+
+	// Apply the update
+	_, err = resource.Update(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Error updating Guarduim failures: %v", err)
+	} else {
+		log.Printf("Updated Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
 	}
 }
 
