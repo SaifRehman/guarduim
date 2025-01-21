@@ -1,5 +1,5 @@
 # Use an image with the required glibc version
-FROM golang:1.18-buster AS builder
+FROM golang:1.23 AS builder
 
 # Set the working directory
 WORKDIR /app
