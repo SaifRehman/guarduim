@@ -16,8 +16,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
 # Start a new stage from scratch
 FROM debian:bullseye-slim
 
-# Install necessary packages including `oc` client
-RUN apt-get update && apt-get install -y ca-certificates curl \
+# Install necessary packages including `oc` client and `file` utility
+RUN apt-get update && apt-get install -y ca-certificates curl file \
     && curl -Lo /tmp/openshift-client.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-4.16/openshift-client-linux.tar.gz \
     && ls -l /tmp/openshift-client.tar.gz \
     && file /tmp/openshift-client.tar.gz \
