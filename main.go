@@ -110,8 +110,9 @@ func main() {
 func processLogEntry(logEntry string) {
 	// Parse log entry and find denied login attempts for specific users
 	// For simplicity, assuming a specific log format
-	if strings.Contains(logEntry, `"decision":"deny"`) {
+	if strings.Contains(logEntry, `"authentication.openshift.io/decision":"deny"`) {
 		username := extractUsernameFromLog(logEntry)
+		log.Printf("user denied issss %v", username)
 		if username != "" {
 			guarduim := Guarduim{
 				Spec: GuarduimSpec{
