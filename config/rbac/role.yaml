@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - auth.example.com
+  resources:
+  - guarduims/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - auth.example.com
+  resources:
+  - guarduims/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - auth.example.com
+  - guard.example.com
+  resources:
+  - guarduims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
