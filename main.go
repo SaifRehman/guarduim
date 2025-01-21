@@ -133,26 +133,24 @@ func updateGuarduimFailures(guarduim Guarduim) {
 		return
 	}
 
-	// Deep copy before modifying
-	updatedGuarduim := existingGuarduim.DeepCopy()
-
-	// Ensure status exists
-	status, ok := updatedGuarduim.Object["status"].(map[string]interface{})
+	// Ensure the status field exists
+	status, ok := existingGuarduim.Object["status"].(map[string]interface{})
 	if !ok {
 		status = make(map[string]interface{})
 	}
 
-	// Read current failure count and increment it
+	// Get the current failures count from status (default to 0 if not found)
 	failures, _ := status["failures"].(float64) // CRDs store numbers as float64
 	newFailures := int(failures) + 1
 	status["failures"] = newFailures
 
-	updatedGuarduim.Object["status"] = status
+	// Update the status with the incremented failure count
+	existingGuarduim.Object["status"] = status
 
 	log.Printf("Updating Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, newFailures)
 
-	// Apply the update
-	_, err = resource.UpdateStatus(context.TODO(), updatedGuarduim, metav1.UpdateOptions{})
+	// Apply the update to the status field (not spec)
+	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
