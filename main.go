@@ -86,7 +86,6 @@ func main() {
 }
 
 func updateGuarduimFailures(guarduim Guarduim) {
-	// Read the namespace dynamically
 	namespace, err := getNamespace()
 	if err != nil {
 		log.Printf("Error reading namespace: %v", err)
@@ -95,27 +94,31 @@ func updateGuarduimFailures(guarduim Guarduim) {
 
 	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
 
-	// Fetch the existing resource
+	// Fetch the existing Guarduim resource
 	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Name, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("Error fetching Guarduim resource: %v", err)
 		return
 	}
 
-	// Ensure 'status' field is populated
-	if existingGuarduim.Object["status"] == nil {
-		existingGuarduim.Object["status"] = make(map[string]interface{})
+	// Ensure status field exists
+	status, ok := existingGuarduim.Object["status"].(map[string]interface{})
+	if !ok {
+		status = make(map[string]interface{})
 	}
 
-	// Set or update the failedAttempts count in the status field
-	existingGuarduim.Object["status"].(map[string]interface{})["failedAttempts"] = guarduim.Status.FailedAttempts
+	log.Printf("status: %v", status)
 
-	// Apply the update
+	// Update failedAttempts count
+	status["failedAttempts"] = guarduim.Status.FailedAttempts
+
+	// Apply status update
+	existingGuarduim.Object["status"] = status
 	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
-		log.Printf("Successfully updated Guarduim status: %s with FailedAttempts=%d\n", guarduim.Spec.Username, guarduim.Status.FailedAttempts)
+		log.Printf("Successfully updated Guarduim status: %s with failedAttempts=%d\n", guarduim.Spec.Username, guarduim.Status.FailedAttempts)
 	}
 }
 

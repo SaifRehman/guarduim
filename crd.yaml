@@ -9,12 +9,14 @@ spec:
     plural: guarduims
     singular: guarduim
     shortNames:
-    - gu
+      - gu
   scope: Namespaced
   versions:
     - name: v1
       served: true
       storage: true
+      subresources:  # Add this section
+        status: {}   # Allows status updates
       schema:
         openAPIV3Schema:
           type: object
@@ -28,9 +30,9 @@ spec:
                   type: integer
             status:
               type: object
+              x-kubernetes-preserve-unknown-fields: true  # Preserve unknown status fields
               properties:
                 isBlocked:
                   type: boolean
-                failures:
+                failedAttempts:
                   type: integer
-                  default: 0
