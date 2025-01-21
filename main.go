@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -105,4 +106,31 @@ func handleEvent(obj interface{}) {
 // Placeholder for blocking a user
 func blockUser(username string) {
 	log.Printf("Blocking user: %s\n", username)
+
+	// Retrieve the Guarduim resource based on the username
+	resource := dynClient.Resource(guarduimGVR).Namespace("default") // replace with actual namespace if needed
+
+	// Get the current Guarduim resource
+	guarduim, err := resource.Get(context.TODO(), username, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error fetching Guarduim resource: %v", err)
+		return
+	}
+
+	// Update the 'isBlocked' status in the Guarduim spec
+	if guarduim.Object["spec"] == nil {
+		guarduim.Object["spec"] = make(map[string]interface{})
+	}
+
+	// Set the isBlocked field to true
+	guarduim.Object["spec"].(map[string]interface{})["isBlocked"] = true
+
+	// Update the resource
+	_, err = resource.Update(context.TODO(), guarduim, metav1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Error updating Guarduim resource: %v", err)
+		return
+	}
+
+	log.Printf("User %s has been blocked.\n", username)
 }
