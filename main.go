@@ -30,16 +30,22 @@ var guarduimGVR = schema.GroupVersionResource{
 var dynClient dynamic.Interface
 
 // Guarduim represents the custom resource structure
+type GuarduimSpec struct {
+	Username  string `json:"username"`
+	Threshold int    `json:"threshold"`
+}
+
+type GuarduimStatus struct {
+	IsBlocked      bool `json:"isBlocked,omitempty"`
+	FailedAttempts int  `json:"failedAttempts,omitempty"` // Only track failed attempts now
+}
+
 type Guarduim struct {
-	Metadata struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
-	} `json:"metadata"`
-	Spec struct {
-		Username  string `json:"username"`
-		Threshold int    `json:"threshold"`
-		Failures  int    `json:"failures"`
-	} `json:"spec"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   GuarduimSpec   `json:"spec,omitempty"`
+	Status GuarduimStatus `json:"status,omitempty"` // Track failed attempts here
 }
 
 func main() {
@@ -79,6 +85,40 @@ func main() {
 	log.Println("Shutting down Guarduim controller")
 }
 
+func updateGuarduimFailures(guarduim Guarduim) {
+	// Read the namespace dynamically
+	namespace, err := getNamespace()
+	if err != nil {
+		log.Printf("Error reading namespace: %v", err)
+		return
+	}
+
+	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
+
+	// Fetch the existing resource
+	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error fetching Guarduim resource: %v", err)
+		return
+	}
+
+	// Ensure 'status' field is populated
+	if existingGuarduim.Object["status"] == nil {
+		existingGuarduim.Object["status"] = make(map[string]interface{})
+	}
+
+	// Set or update the failedAttempts count in the status field
+	existingGuarduim.Object["status"].(map[string]interface{})["failedAttempts"] = guarduim.Status.FailedAttempts
+
+	// Apply the update
+	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Error updating Guarduim status: %v", err)
+	} else {
+		log.Printf("Successfully updated Guarduim status: %s with FailedAttempts=%d\n", guarduim.Spec.Username, guarduim.Status.FailedAttempts)
+	}
+}
+
 func handleEvent(obj interface{}) {
 	unstructuredObj, ok := obj.(*unstructured.Unstructured)
 	if !ok {
@@ -100,74 +140,33 @@ func handleEvent(obj interface{}) {
 		return
 	}
 
-	log.Printf("[BEFORE] Processing Guarduim: User=%s, Failures=%d/%d\n",
-		guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
+	log.Printf("Processing Guarduim: User=%s, FailedAttempts=%d/%d\n",
+		guarduim.Spec.Username, guarduim.Status.FailedAttempts, guarduim.Spec.Threshold)
 
-	// Update the Guarduim status
+	// Ensure status is populated with failedAttempts if it isn't already
+	if guarduim.Status.FailedAttempts == 0 {
+		guarduim.Status.FailedAttempts = 0 // Set default value if not set
+	}
+
+	// Increment failedAttempts count
+	guarduim.Status.FailedAttempts++
+
+	// Update the Guarduim resource with the incremented failedAttempts count
 	updateGuarduimFailures(guarduim)
 
-	// Block user if failures exceed threshold
-	if guarduim.Spec.Failures >= guarduim.Spec.Threshold {
+	// Block user if failedAttempts exceed threshold
+	if guarduim.Status.FailedAttempts >= guarduim.Spec.Threshold {
+		// Get the namespace dynamically
 		namespace, err := getNamespace()
 		if err != nil {
-			log.Printf("Error reading namespace: %v", err)
+			log.Printf("Error getting namespace: %v", err)
 			return
 		}
+		// Pass both username and namespace to blockUser
 		blockUser(guarduim.Spec.Username, namespace)
 	}
 }
 
-func updateGuarduimFailures(guarduim Guarduim) {
-	// Read the namespace dynamically
-	namespace, err := getNamespace()
-	if err != nil {
-		log.Printf("Error reading namespace: %v", err)
-		return
-	}
-
-	// Create the resource client
-	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
-
-	// Fetch the existing Guarduim resource
-	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Metadata.Name, metav1.GetOptions{})
-	if err != nil {
-		log.Printf("Error fetching Guarduim resource: %v", err)
-		return
-	}
-
-	// Log the current status to debug
-	log.Printf("Current status: %+v", existingGuarduim.Object["status"])
-
-	// Increment the failures count
-	guarduim.Spec.Failures++
-
-	if existingGuarduim.Object["status"] == nil {
-		existingGuarduim.Object["status"] = make(map[string]interface{})
-	}
-
-	// Initialize failures in status if it's missing
-	status := existingGuarduim.Object["status"].(map[string]interface{})
-	if status["failures"] == nil {
-		status["failures"] = 0 // Set initial value for failures if it's not set
-	}
-
-	// Increment the failure count
-	failures := status["failures"].(int) + 1
-	status["failures"] = failures
-
-	// Optionally, set additional fields like isBlocked or failedAttempts
-	status["isBlocked"] = failures >= guarduim.Spec.Threshold
-
-	// Update the status
-	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
-	if err != nil {
-		log.Printf("Error updating Guarduim status: %v", err)
-	} else {
-		log.Printf("Successfully updated Guarduim status: User=%s with Failures=%d\n", guarduim.Spec.Username, failures)
-	}
-}
-
-// Process Guarduim events
 func handleFailureEvent(oldObj, newObj interface{}) {
 	oldUnstructured, okOld := oldObj.(*unstructured.Unstructured)
 	newUnstructured, okNew := newObj.(*unstructured.Unstructured)
@@ -188,26 +187,26 @@ func handleFailureEvent(oldObj, newObj interface{}) {
 
 	// Log the event
 	log.Printf("User: %s, Old Failures: %d, New Failures: %d\n",
-		newGuarduim.Spec.Username, oldGuarduim.Spec.Failures, newGuarduim.Spec.Failures)
+		newGuarduim.Spec.Username, oldGuarduim.Status.FailedAttempts, newGuarduim.Status.FailedAttempts)
 
 	// Detect authentication failure (when failures increase)
-	if newGuarduim.Spec.Failures > oldGuarduim.Spec.Failures {
+	if newGuarduim.Status.FailedAttempts > oldGuarduim.Status.FailedAttempts {
 		log.Printf("Authentication failed for user %s. Current Failures: %d/%d\n",
-			newGuarduim.Spec.Username, newGuarduim.Spec.Failures, newGuarduim.Spec.Threshold)
+			newGuarduim.Spec.Username, newGuarduim.Status.FailedAttempts, newGuarduim.Spec.Threshold)
 
 		// Increment the failure count
-		newGuarduim.Spec.Failures++
+		newGuarduim.Status.FailedAttempts++
 		log.Printf("Incrementing failure count for user %s: New Failures=%d\n",
-			newGuarduim.Spec.Username, newGuarduim.Spec.Failures)
+			newGuarduim.Spec.Username, newGuarduim.Status.FailedAttempts)
 
 		// Update the Guarduim CR to persist the new failure count
 		updateGuarduimFailures(newGuarduim)
 	}
 
 	// Check if failures exceed the threshold
-	if newGuarduim.Spec.Failures >= newGuarduim.Spec.Threshold {
+	if newGuarduim.Status.FailedAttempts >= newGuarduim.Spec.Threshold {
 		log.Printf("User %s exceeded failure threshold. Blocking user...\n", newGuarduim.Spec.Username)
-		blockUser(newGuarduim.Metadata.Name, newGuarduim.Metadata.Namespace)
+		blockUser(newGuarduim.Spec.Username, newGuarduim.Namespace)
 	}
 }
 

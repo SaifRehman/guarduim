@@ -33,5 +33,4 @@ spec:
                   type: boolean
                 failures:
                   type: integer
-                failedAttempts:
-                  type: integer
+                  default: 0
