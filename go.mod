@@ -1,6 +1,6 @@
 module github.com/SaifRehman/guarduim
 
-go 1.23
+go 1.20
 
 require (
 	github.com/go-logr/logr v1.4.2
