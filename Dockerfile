@@ -14,7 +14,7 @@ RUN go mod tidy
 COPY . .
 
 # Build the Go application
-RUN GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
+RUN GOOS=linux  go build -o guarduim-controller .
 
 # Start a new stage to minimize the final image size
 FROM alpine:latest
