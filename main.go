@@ -86,16 +86,43 @@ func handleEvent(obj interface{}) {
 		return
 	}
 
-	// Convert to structured Guarduim
-	var guarduim Guarduim
-	data, _ := json.Marshal(unstructuredObj.Object)
-	json.Unmarshal(data, &guarduim)
+	// Convert unstructured object to structured Guarduim
+	data, err := json.Marshal(unstructuredObj.Object)
+	if err != nil {
+		log.Printf("Error marshalling object: %v", err)
+		return
+	}
 
-	log.Printf("New Guarduim resource detected: %s (User: %s, Failures: %d, Threshold: %d)\n",
-		guarduim.Metadata.Name, guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
+	var guarduim Guarduim
+	err = json.Unmarshal(data, &guarduim)
+	if err != nil {
+		log.Printf("Error unmarshalling object: %v", err)
+		return
+	}
+
+	log.Printf("[BEFORE] Processing Guarduim: User=%s, Failures=%d/%d\n",
+		guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
+
+	// Increment failure count
+	guarduim.Spec.Failures++
+
+	log.Printf("[AFTER] Incremented Failures=%d\n", guarduim.Spec.Failures)
+
+	// Update the Guarduim resource
+	updateGuarduimFailures(guarduim) // ✅ Ensure we're passing guarduim
+
+	// Block user if failures exceed threshold
+	if guarduim.Spec.Failures >= guarduim.Spec.Threshold {
+		namespace, err := getNamespace()
+		if err != nil {
+			log.Printf("Error reading namespace: %v", err)
+			return
+		}
+		blockUser(guarduim.Spec.Username, namespace) // ✅ Fix function signature
+	}
 }
+
 func updateGuarduimFailures(guarduim Guarduim) {
-	// Read the namespace dynamically
 	namespace, err := getNamespace()
 	if err != nil {
 		log.Printf("Error reading namespace: %v", err)
@@ -120,18 +147,21 @@ func updateGuarduimFailures(guarduim Guarduim) {
 		spec = make(map[string]interface{})
 	}
 
-	// Convert failures to int before incrementing
+	// Read current failure count and increment it
 	failures, _ := spec["failures"].(float64) // CRDs store numbers as float64
-	spec["failures"] = int(failures) + 1
+	newFailures := int(failures) + 1
+	spec["failures"] = newFailures
 
 	updatedGuarduim.Object["spec"] = spec
+
+	log.Printf("Updating Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, newFailures)
 
 	// Apply the update
 	_, err = resource.Update(context.TODO(), updatedGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim failures: %v", err)
 	} else {
-		log.Printf("Updated Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, int(failures)+1)
+		log.Printf("Successfully updated Guarduim: %s with Failures=%d\n", guarduim.Spec.Username, newFailures)
 	}
 }
 
@@ -180,43 +210,32 @@ func handleFailureEvent(oldObj, newObj interface{}) {
 }
 
 // blockUser updates the Guarduim resource to block a user
-func blockUser(name, namespace string) {
-	log.Printf("Blocking user: %s in namespace: %s\n", name, namespace)
+func blockUser(username, namespace string) {
+	log.Printf("Blocking user: %s in namespace: %s\n", username, namespace)
 
 	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
 
-	guarduim, err := resource.Get(context.TODO(), name, metav1.GetOptions{})
+	guarduim, err := resource.Get(context.TODO(), username, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("Error fetching Guarduim resource: %v", err)
 		return
 	}
 
+	// Ensure spec exists
 	spec, ok := guarduim.Object["spec"].(map[string]interface{})
 	if !ok {
-		log.Println("Error: spec is missing or not a map")
-		return
+		spec = make(map[string]interface{})
 	}
 
-	// Convert values safely
-	failures, _ := guarduim.Object["spec"].(map[string]interface{})["failures"].(float64)
-	threshold, _ := guarduim.Object["spec"].(map[string]interface{})["threshold"].(float64)
+	// Read failure count and threshold safely
+	failures, _ := spec["failures"].(float64)
+	threshold, _ := spec["threshold"].(float64)
 
 	if int(failures) >= int(threshold) {
-		guarduim.Object["spec"].(map[string]interface{})["isBlocked"] = true
+		spec["isBlocked"] = true
 	}
 
-	// Update the failed attempts in the Guarduim resource
-	if guarduim.Object["status"] == nil {
-		guarduim.Object["status"] = make(map[string]interface{})
-	}
-	status, ok := guarduim.Object["status"].(map[string]interface{})
-	if !ok {
-		log.Println("Error: status is missing or not a map")
-		return
-	}
-
-	status["failedAttempts"] = failures
-	status["isBlocked"] = spec["isBlocked"]
+	guarduim.Object["spec"] = spec
 
 	// Update the resource
 	_, err = resource.Update(context.TODO(), guarduim, metav1.UpdateOptions{})
@@ -225,7 +244,7 @@ func blockUser(name, namespace string) {
 		return
 	}
 
-	log.Printf("User %s has been blocked.\n", name)
+	log.Printf("User %s has been blocked.\n", username)
 }
 
 // getNamespace retrieves the namespace where the controller is running
