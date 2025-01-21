@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -18,10 +19,13 @@ import (
 
 // Define the GroupVersionResource for Guarduim
 var guarduimGVR = schema.GroupVersionResource{
-	Group:    "guard.example.com",
+	Group:    "example.com",
 	Version:  "v1",
 	Resource: "guarduims",
 }
+
+// Global dynamic client
+var dynClient dynamic.Interface
 
 // Guarduim represents the custom resource structure
 type Guarduim struct {
@@ -44,7 +48,7 @@ func main() {
 	}
 
 	// Create a dynamic Kubernetes client
-	dynClient, err := dynamic.NewForConfig(config)
+	dynClient, err = dynamic.NewForConfig(config)
 	if err != nil {
 		log.Fatalf("Error creating dynamic client: %v", err)
 	}
@@ -103,7 +107,7 @@ func handleEvent(obj interface{}) {
 	}
 }
 
-// Placeholder for blocking a user
+// blockUser updates the Guarduim resource to block a user
 func blockUser(username string) {
 	log.Printf("Blocking user: %s\n", username)
 
