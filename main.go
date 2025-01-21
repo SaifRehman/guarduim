@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -109,10 +111,17 @@ func handleEvent(obj interface{}) {
 
 // blockUser updates the Guarduim resource to block a user
 func blockUser(username string) {
-	log.Printf("Blocking user: %s\n", username)
+	// Read the namespace dynamically from the environment file
+	namespace, err := getNamespace()
+	if err != nil {
+		log.Printf("Error reading namespace: %v", err)
+		return
+	}
+
+	log.Printf("Blocking user: %s in namespace: %s\n", username, namespace)
 
 	// Retrieve the Guarduim resource based on the username
-	resource := dynClient.Resource(guarduimGVR).Namespace("guarduim") // replace with actual namespace if needed
+	resource := dynClient.Resource(guarduimGVR).Namespace(namespace) // Use dynamic namespace
 
 	// Get the current Guarduim resource
 	guarduim, err := resource.Get(context.TODO(), username, metav1.GetOptions{})
@@ -137,4 +146,26 @@ func blockUser(username string) {
 	}
 
 	log.Printf("User %s has been blocked.\n", username)
+}
+
+func getNamespace() (string, error) {
+	// The namespace is stored in this file in Kubernetes
+	namespaceFile := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	file, err := os.Open(namespaceFile)
+	if err != nil {
+		return "", fmt.Errorf("could not open namespace file: %v", err)
+	}
+	defer file.Close()
+
+	// Read the namespace from the file
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		return scanner.Text(), nil
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading namespace file: %v", err)
+	}
+
+	// Return error if we couldn't read the namespace
+	return "", fmt.Errorf("namespace not found")
 }
