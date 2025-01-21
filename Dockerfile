@@ -1,24 +1,35 @@
-# Use Golang as the base image for building
-FROM golang:1.21 AS builder
+# Use official Golang base image
+FROM golang:1.20 AS builder
 
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy source files
-COPY . .
+# Copy the Go modules manifests
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod tidy
 
-# Build the controller binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o guarduim-controller
+# Copy the rest of the application source code
+COPY . .
 
-# Use a minimal base image for runtime
-FROM registry.access.redhat.com/ubi8/ubi-minimal
+# Build the Go application
+RUN GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
 
-WORKDIR /root/
+# Start a new stage to minimize the final image size
+FROM alpine:latest
 
-# Copy the built binary from builder stage
-COPY --from=builder /app/guarduim-controller .
+# Install necessary dependencies for running Go binary
+RUN apk --no-cache add ca-certificates
 
-# Set entrypoint
-ENTRYPOINT ["./guarduim-controller"]
+# Copy the Go binary from the builder stage
+COPY --from=builder /app/guarduim-controller /usr/local/bin/guarduim-controller
+
+# Set the entrypoint to the Go binary
+ENTRYPOINT ["/usr/local/bin/guarduim-controller"]
+
+# Expose port (this is a placeholder, adjust if you need to expose a port)
+EXPOSE 8080
+
+# Default command to run the binary
+CMD ["guarduim-controller"]
