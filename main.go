@@ -129,6 +129,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 
 	// Fetch the existing resource
 	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Metadata.Name, metav1.GetOptions{})
+
 	if err != nil {
 		log.Printf("Error fetching Guarduim resource: %v", err)
 		return
@@ -149,6 +150,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 	existingGuarduim.Object["status"] = status
 
 	log.Printf("Updating Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, newFailures)
+	log.Printf("Existing Guarduim: %+v", existingGuarduim)
 
 	// Apply the update to the status field (not spec)
 	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
