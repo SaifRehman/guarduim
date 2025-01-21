@@ -8,6 +8,8 @@ spec:
     kind: Guarduim
     plural: guarduims
     singular: guarduim
+    shortNames:
+    - gu
   scope: Namespaced
   versions:
     - name: v1
@@ -24,10 +26,12 @@ spec:
                   type: string
                 threshold:
                   type: integer
+                failures:
+                  type: integer
             status:
               type: object
               properties:
-                failedAttempts:
-                  type: integer
                 isBlocked:
                   type: boolean
+                failedAttempts:
+                  type: integer

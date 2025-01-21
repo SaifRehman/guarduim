@@ -19,7 +19,7 @@ import (
 
 // Define the GroupVersionResource for Guarduim
 var guarduimGVR = schema.GroupVersionResource{
-	Group:    "guarduim.example.com",
+	Group:    "guard.example.com",
 	Version:  "v1",
 	Resource: "guarduims",
 }
@@ -112,7 +112,7 @@ func blockUser(username string) {
 	log.Printf("Blocking user: %s\n", username)
 
 	// Retrieve the Guarduim resource based on the username
-	resource := dynClient.Resource(guarduimGVR).Namespace("default") // replace with actual namespace if needed
+	resource := dynClient.Resource(guarduimGVR).Namespace("guarduim") // replace with actual namespace if needed
 
 	// Get the current Guarduim resource
 	guarduim, err := resource.Get(context.TODO(), username, metav1.GetOptions{})
