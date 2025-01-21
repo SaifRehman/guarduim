@@ -95,6 +95,7 @@ func handleEvent(obj interface{}) {
 		guarduim.Metadata.Name, guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
 }
 func updateGuarduimFailures(guarduim Guarduim) {
+	// Read the namespace dynamically
 	namespace, err := getNamespace()
 	if err != nil {
 		log.Printf("Error reading namespace: %v", err)
@@ -103,31 +104,34 @@ func updateGuarduimFailures(guarduim Guarduim) {
 
 	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
 
-	// Fetch the latest Guarduim resource
+	// Fetch the existing resource
 	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Metadata.Name, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("Error fetching Guarduim resource: %v", err)
 		return
 	}
 
-	// Ensure 'spec' exists
-	spec, found, _ := unstructured.NestedMap(existingGuarduim.Object, "spec")
-	if !found {
+	// Deep copy before modifying
+	updatedGuarduim := existingGuarduim.DeepCopy()
+
+	// Ensure spec exists
+	spec, ok := updatedGuarduim.Object["spec"].(map[string]interface{})
+	if !ok {
 		spec = make(map[string]interface{})
 	}
 
-	// Update failure count in CR
-	spec["failures"] = guarduim.Spec.Failures
+	// Convert failures to int before incrementing
+	failures, _ := spec["failures"].(float64) // CRDs store numbers as float64
+	spec["failures"] = int(failures) + 1
 
-	// Update the spec in the object
-	existingGuarduim.Object["spec"] = spec
+	updatedGuarduim.Object["spec"] = spec
 
 	// Apply the update
-	_, err = resource.Update(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
+	_, err = resource.Update(context.TODO(), updatedGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim failures: %v", err)
 	} else {
-		log.Printf("Updated Guarduim: User=%s, Persisted Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
+		log.Printf("Updated Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, int(failures)+1)
 	}
 }
 
@@ -194,11 +198,11 @@ func blockUser(name, namespace string) {
 	}
 
 	// Convert values safely
-	failures, _ := spec["failures"].(float64) // JSON numbers are float64
-	threshold, _ := spec["threshold"].(float64)
+	failures, _ := guarduim.Object["spec"].(map[string]interface{})["failures"].(float64)
+	threshold, _ := guarduim.Object["spec"].(map[string]interface{})["threshold"].(float64)
 
-	if failures >= threshold {
-		spec["isBlocked"] = true
+	if int(failures) >= int(threshold) {
+		guarduim.Object["spec"].(map[string]interface{})["isBlocked"] = true
 	}
 
 	// Update the failed attempts in the Guarduim resource
