@@ -1,5 +1,5 @@
 # Use an image with the required glibc version
-FROM golang:1.23 AS builder
+FROM go:1.21 AS builder
 
 # Set the working directory
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY . .
 RUN GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
 
 # Use a compatible image for the runtime (e.g., debian:bullseye)
-FROM debian:bullseye-slim
+FROM go:1.21.0-bullseye
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/guarduim-controller /usr/local/bin/guarduim-controller
