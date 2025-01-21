@@ -18,9 +18,9 @@ FROM debian:bullseye-slim
 
 # Install necessary packages, including `oc` client
 RUN apt-get update && apt-get install -y ca-certificates curl \
-    && curl -Lo /tmp/oc.tar.gz https://github.com/openshift/okd/releases/download/release-4.10.16/openshift-client-linux-4.10.16.tar.gz \
-    && tar -xvf /tmp/oc.tar.gz -C /usr/local/bin \
-    && rm -f /tmp/oc.tar.gz
+    && curl -Lo /tmp/openshift-client.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux-4.12.0.tar.gz \
+    && tar -xvzf /tmp/openshift-client.tar.gz -C /usr/local/bin \
+    && rm -f /tmp/openshift-client.tar.gz
 
 # Set the Current Working Directory inside the container
 WORKDIR /root/
