@@ -116,7 +116,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 		spec = make(map[string]interface{})
 	}
 
-	// Increment failure count
+	// Update failure count in CR
 	spec["failures"] = guarduim.Spec.Failures
 
 	// Update the spec in the object
@@ -127,7 +127,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 	if err != nil {
 		log.Printf("Error updating Guarduim failures: %v", err)
 	} else {
-		log.Printf("Updated Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
+		log.Printf("Updated Guarduim: User=%s, Persisted Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
 	}
 }
 
@@ -150,17 +150,21 @@ func handleFailureEvent(oldObj, newObj interface{}) {
 	newData, _ := json.Marshal(newUnstructured.Object)
 	json.Unmarshal(newData, &newGuarduim)
 
-	// Log the event for debugging
+	// Log the event
 	log.Printf("User: %s, Old Failures: %d, New Failures: %d\n",
 		newGuarduim.Spec.Username, oldGuarduim.Spec.Failures, newGuarduim.Spec.Failures)
 
-	// Check if authentication failed (only increment if failure count is unchanged)
-	if newGuarduim.Spec.Failures == oldGuarduim.Spec.Failures {
-		newGuarduim.Spec.Failures++ // Manually increment failures
+	// Detect authentication failure (when failures increase)
+	if newGuarduim.Spec.Failures > oldGuarduim.Spec.Failures {
+		log.Printf("Authentication failed for user %s. Current Failures: %d/%d\n",
+			newGuarduim.Spec.Username, newGuarduim.Spec.Failures, newGuarduim.Spec.Threshold)
+
+		// Increment the failure count
+		newGuarduim.Spec.Failures++
 		log.Printf("Incrementing failure count for user %s: New Failures=%d\n",
 			newGuarduim.Spec.Username, newGuarduim.Spec.Failures)
 
-		// Persist the updated failure count
+		// Update the Guarduim CR to persist the new failure count
 		updateGuarduimFailures(newGuarduim)
 	}
 
