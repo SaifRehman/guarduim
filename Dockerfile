@@ -4,6 +4,8 @@ FROM golang:1.23 as builder
 # Set the Current Working Directory inside the container
 WORKDIR /app
 
+# Copy the Go Modules manifests
+COPY go.mod go.sum ./
 
 # Copy the source code into the container
 COPY . .
@@ -25,8 +27,7 @@ COPY --from=builder /app/guarduim-controller .
 
 # Expose the port the app runs on (if necessary)
 EXPOSE 8080
-RUN chmod +x guarduim-controller
-
+chmod +x guarduim-controller
 
 # Command to run the executable
 CMD ["./guarduim-controller"]
