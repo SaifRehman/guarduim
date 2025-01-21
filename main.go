@@ -107,10 +107,14 @@ func updateGuarduimFailures(guarduim Guarduim) {
 		status = make(map[string]interface{})
 	}
 
-	log.Printf("status: %v", status)
+	// Get the current failedAttempts value (default to 0 if not set)
+	currentAttempts, ok := status["failedAttempts"].(int)
+	if !ok {
+		currentAttempts = 0
+	}
 
-	// Update failedAttempts count
-	status["failedAttempts"] = guarduim.Status.FailedAttempts
+	// Increment failedAttempts manually
+	status["failedAttempts"] = currentAttempts + 1
 
 	// Apply status update
 	existingGuarduim.Object["status"] = status
@@ -118,7 +122,7 @@ func updateGuarduimFailures(guarduim Guarduim) {
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
-		log.Printf("Successfully updated Guarduim status: %s with failedAttempts=%d\n", guarduim.Spec.Username, guarduim.Status.FailedAttempts)
+		log.Printf("Successfully updated Guarduim status: %s with failedAttempts=%d\n", guarduim.Spec.Username, status["failedAttempts"])
 	}
 }
 
