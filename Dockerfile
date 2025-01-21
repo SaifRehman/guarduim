@@ -18,7 +18,7 @@ FROM debian:bullseye-slim
 
 # Install necessary packages including `oc` client
 RUN apt-get update && apt-get install -y ca-certificates curl \
-    && curl -Lo /tmp/openshift-client.tar.gz https://downloads-openshift-console.apps.cluster-jsnsf.dynamic.redhatworkshops.io/arm64/linux/oc.tar \
+    && curl -Lo /tmp/openshift-client.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest-4.16/openshift-client-linux.tar.gz \
     && ls -l /tmp/openshift-client.tar.gz \
     && file /tmp/openshift-client.tar.gz \
     && tar -xvzf /tmp/openshift-client.tar.gz -C /usr/local/bin \
