@@ -333,5 +333,5 @@ func blockUser(username, namespace string) {
 func getNamespace() (string, error) {
 	// Assume the namespace is 'default' for now
 	// You can dynamically fetch namespace if required using Kubernetes APIs
-	return "default", nil
+	return "guarduim", nil
 }
