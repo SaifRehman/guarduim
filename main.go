@@ -103,13 +103,8 @@ func handleEvent(obj interface{}) {
 	log.Printf("[BEFORE] Processing Guarduim: User=%s, Failures=%d/%d\n",
 		guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
 
-	// Increment failure count
-	guarduim.Spec.Failures++
-
-	log.Printf("[AFTER] Incremented Failures=%d\n", guarduim.Spec.Failures)
-
-	// Update the Guarduim resource
-	updateGuarduimFailures(guarduim) // ✅ Ensure we're passing guarduim
+	// Update the Guarduim status
+	updateGuarduimFailures(guarduim)
 
 	// Block user if failures exceed threshold
 	if guarduim.Spec.Failures >= guarduim.Spec.Threshold {
@@ -118,7 +113,7 @@ func handleEvent(obj interface{}) {
 			log.Printf("Error reading namespace: %v", err)
 			return
 		}
-		blockUser(guarduim.Spec.Username, namespace) // ✅ Fix function signature
+		blockUser(guarduim.Spec.Username, namespace)
 	}
 }
 
@@ -141,27 +136,27 @@ func updateGuarduimFailures(guarduim Guarduim) {
 	// Deep copy before modifying
 	updatedGuarduim := existingGuarduim.DeepCopy()
 
-	// Ensure spec exists
-	spec, ok := updatedGuarduim.Object["spec"].(map[string]interface{})
+	// Ensure status exists
+	status, ok := updatedGuarduim.Object["status"].(map[string]interface{})
 	if !ok {
-		spec = make(map[string]interface{})
+		status = make(map[string]interface{})
 	}
 
 	// Read current failure count and increment it
-	failures, _ := spec["failures"].(float64) // CRDs store numbers as float64
+	failures, _ := status["failures"].(float64) // CRDs store numbers as float64
 	newFailures := int(failures) + 1
-	spec["failures"] = newFailures
+	status["failures"] = newFailures
 
-	updatedGuarduim.Object["spec"] = spec
+	updatedGuarduim.Object["status"] = status
 
 	log.Printf("Updating Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, newFailures)
 
 	// Apply the update
-	_, err = resource.Update(context.TODO(), updatedGuarduim, metav1.UpdateOptions{})
+	_, err = resource.UpdateStatus(context.TODO(), updatedGuarduim, metav1.UpdateOptions{})
 	if err != nil {
-		log.Printf("Error updating Guarduim failures: %v", err)
+		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
-		log.Printf("Successfully updated Guarduim: %s with Failures=%d\n", guarduim.Spec.Username, newFailures)
+		log.Printf("Successfully updated Guarduim status: %s with Failures=%d\n", guarduim.Spec.Username, newFailures)
 	}
 }
 
@@ -209,7 +204,6 @@ func handleFailureEvent(oldObj, newObj interface{}) {
 	}
 }
 
-// blockUser updates the Guarduim resource to block a user
 func blockUser(username, namespace string) {
 	log.Printf("Blocking user: %s in namespace: %s\n", username, namespace)
 
@@ -221,26 +215,26 @@ func blockUser(username, namespace string) {
 		return
 	}
 
-	// Ensure spec exists
-	spec, ok := guarduim.Object["spec"].(map[string]interface{})
+	// Ensure status exists
+	status, ok := guarduim.Object["status"].(map[string]interface{})
 	if !ok {
-		spec = make(map[string]interface{})
+		status = make(map[string]interface{})
 	}
 
-	// Read failure count and threshold safely
-	failures, _ := spec["failures"].(float64)
-	threshold, _ := spec["threshold"].(float64)
+	// Read failure count safely
+	failures, _ := status["failures"].(float64)
+	threshold, _ := guarduim.Object["spec"].(map[string]interface{})["threshold"].(float64)
 
 	if int(failures) >= int(threshold) {
-		spec["isBlocked"] = true
+		status["isBlocked"] = true
 	}
 
-	guarduim.Object["spec"] = spec
+	guarduim.Object["status"] = status
 
 	// Update the resource
-	_, err = resource.Update(context.TODO(), guarduim, metav1.UpdateOptions{})
+	_, err = resource.UpdateStatus(context.TODO(), guarduim, metav1.UpdateOptions{})
 	if err != nil {
-		log.Printf("Error updating Guarduim resource: %v", err)
+		log.Printf("Error updating Guarduim status: %v", err)
 		return
 	}
 
