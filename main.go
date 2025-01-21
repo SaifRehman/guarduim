@@ -118,49 +118,44 @@ func handleEvent(obj interface{}) {
 }
 
 func updateGuarduimFailures(guarduim Guarduim) {
+	// Read the namespace dynamically
 	namespace, err := getNamespace()
 	if err != nil {
 		log.Printf("Error reading namespace: %v", err)
 		return
 	}
-	log.Printf("namespace isss: %v", namespace)
 
+	// Create the resource client
 	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
 
-	// Fetch the existing resource
+	// Fetch the existing Guarduim resource
 	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Metadata.Name, metav1.GetOptions{})
-
 	if err != nil {
 		log.Printf("Error fetching Guarduim resource: %v", err)
 		return
 	}
 
-	// Ensure the status field exists
-	status, ok := existingGuarduim.Object["status"].(map[string]interface{})
-	if !ok {
-		status = make(map[string]interface{})
-	}
-
-	// Get the current failures count from status (default to 0 if not found)
-	failures, _ := status["failures"].(float64) // CRDs store numbers as float64
-	newFailures := int(failures) + 1
-	status["failures"] = newFailures
-
-	// Update the status with the incremented failure count
-	existingGuarduim.Object["status"] = status
+	// Log the current status to debug
 	log.Printf("Current status: %+v", existingGuarduim.Object["status"])
 
-	log.Printf("Updating Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, newFailures)
-	log.Printf("Existing Guarduim: %+v", existingGuarduim)
+	// Increment the failures count
+	guarduim.Spec.Failures++
 
-	// Apply the update to the status field (not spec)
+	// Update the failures field in the status section of the resource
+	if existingGuarduim.Object["status"] == nil {
+		existingGuarduim.Object["status"] = make(map[string]interface{})
+	}
 	existingGuarduim.Object["status"].(map[string]interface{})["failures"] = guarduim.Spec.Failures
 
+	// Log the updated status before applying the changes
+	log.Printf("Updated status: %+v", existingGuarduim.Object["status"])
+
+	// Use UpdateStatus to update only the status field (do not modify spec)
 	_, err = resource.UpdateStatus(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
 	if err != nil {
 		log.Printf("Error updating Guarduim status: %v", err)
 	} else {
-		log.Printf("Successfully updated Guarduim status: %s with Failures=%d\n", guarduim.Spec.Username, newFailures)
+		log.Printf("Successfully updated Guarduim status: User=%s with Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
 	}
 }
 
