@@ -123,20 +123,29 @@ func blockUser(username string) {
 	// Retrieve the Guarduim resource based on the username
 	resource := dynClient.Resource(guarduimGVR).Namespace(namespace) // Use dynamic namespace
 
-	// Get the current Guarduim resource
 	guarduim, err := resource.Get(context.TODO(), username, metav1.GetOptions{})
 	if err != nil {
 		log.Printf("Error fetching Guarduim resource: %v", err)
 		return
 	}
 
-	// Update the 'isBlocked' status in the Guarduim spec
+	// Check if the spec has an 'isBlocked' field and update it
 	if guarduim.Object["spec"] == nil {
 		guarduim.Object["spec"] = make(map[string]interface{})
 	}
 
-	// Set the isBlocked field to true
-	guarduim.Object["spec"].(map[string]interface{})["isBlocked"] = true
+	// Check if the user has exceeded the failure threshold and block the user
+	if guarduim.Object["spec"].(map[string]interface{})["failures"].(int) >= guarduim.Object["spec"].(map[string]interface{})["threshold"].(int) {
+		guarduim.Object["spec"].(map[string]interface{})["isBlocked"] = true
+	}
+
+	// Update the failed attempts and isBlocked status in the Guarduim resource
+	if guarduim.Object["status"] == nil {
+		guarduim.Object["status"] = make(map[string]interface{})
+	}
+
+	guarduim.Object["status"].(map[string]interface{})["failedAttempts"] = guarduim.Object["spec"].(map[string]interface{})["failures"]
+	guarduim.Object["status"].(map[string]interface{})["isBlocked"] = guarduim.Object["spec"].(map[string]interface{})["isBlocked"]
 
 	// Update the resource
 	_, err = resource.Update(context.TODO(), guarduim, metav1.UpdateOptions{})
