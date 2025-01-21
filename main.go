@@ -243,6 +243,7 @@ func blockUser(username, namespace string) {
 
 // getNamespace retrieves the namespace where the controller is running
 func getNamespace() (string, error) {
+	// The namespace is stored in this file in Kubernetes
 	namespaceFile := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 	file, err := os.Open(namespaceFile)
 	if err != nil {
@@ -250,13 +251,17 @@ func getNamespace() (string, error) {
 	}
 	defer file.Close()
 
+	// Read the namespace from the file
 	scanner := bufio.NewScanner(file)
 	if scanner.Scan() {
-		return scanner.Text(), nil
+		namespace := scanner.Text()
+		log.Printf("Fetched namespace: %s\n", namespace) // Log to verify
+		return namespace, nil
 	}
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("error reading namespace file: %v", err)
 	}
 
+	// Return error if we couldn't read the namespace
 	return "", fmt.Errorf("namespace not found")
 }
