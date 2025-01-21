@@ -14,7 +14,7 @@ RUN go mod tidy
 COPY . .
 
 # Build the Go binary
-RUN GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
+RUN GOOS=linux GOARCH=arm64 go build -o guarduim-controller .
 
 # Use a compatible image for the runtime (e.g., debian:bullseye)
 FROM debian:bullseye-slim
