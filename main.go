@@ -94,6 +94,37 @@ func handleEvent(obj interface{}) {
 	log.Printf("New Guarduim resource detected: %s (User: %s, Failures: %d, Threshold: %d)\n",
 		guarduim.Metadata.Name, guarduim.Spec.Username, guarduim.Spec.Failures, guarduim.Spec.Threshold)
 }
+func updateGuarduimFailures(guarduim Guarduim) {
+	// Read the namespace dynamically
+	namespace, err := getNamespace()
+	if err != nil {
+		log.Printf("Error reading namespace: %v", err)
+		return
+	}
+
+	resource := dynClient.Resource(guarduimGVR).Namespace(namespace)
+
+	// Fetch the existing resource
+	existingGuarduim, err := resource.Get(context.TODO(), guarduim.Metadata.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("Error fetching Guarduim resource: %v", err)
+		return
+	}
+
+	// Update the failures count
+	if existingGuarduim.Object["spec"] == nil {
+		existingGuarduim.Object["spec"] = make(map[string]interface{})
+	}
+	existingGuarduim.Object["spec"].(map[string]interface{})["failures"] = guarduim.Spec.Failures
+
+	// Apply the update
+	_, err = resource.Update(context.TODO(), existingGuarduim, metav1.UpdateOptions{})
+	if err != nil {
+		log.Printf("Error updating Guarduim failures: %v", err)
+	} else {
+		log.Printf("Updated Guarduim: User=%s, New Failures=%d\n", guarduim.Spec.Username, guarduim.Spec.Failures)
+	}
+}
 
 // Process Guarduim events
 func handleFailureEvent(oldObj, newObj interface{}) {
@@ -114,14 +145,22 @@ func handleFailureEvent(oldObj, newObj interface{}) {
 	newData, _ := json.Marshal(newUnstructured.Object)
 	json.Unmarshal(newData, &newGuarduim)
 
-	// Only process updates where failures increased
-	if newGuarduim.Spec.Failures > oldGuarduim.Spec.Failures {
-		log.Printf("Authentication failed for user %s. Failures: %d/%d\n",
-			newGuarduim.Spec.Username, newGuarduim.Spec.Failures, newGuarduim.Spec.Threshold)
+	// Log the event for debugging
+	log.Printf("User: %s, Old Failures: %d, New Failures: %d\n",
+		newGuarduim.Spec.Username, oldGuarduim.Spec.Failures, newGuarduim.Spec.Failures)
 
-		if newGuarduim.Spec.Failures >= newGuarduim.Spec.Threshold {
-			blockUser(newGuarduim.Metadata.Name, newGuarduim.Metadata.Namespace)
-		}
+	// If authentication fails, manually increment failures count
+	if newGuarduim.Spec.Failures == oldGuarduim.Spec.Failures {
+		newGuarduim.Spec.Failures++ // Increment failures
+
+		// Update the Guarduim resource with the new failure count
+		updateGuarduimFailures(newGuarduim)
+	}
+
+	// Check if failures exceed the threshold
+	if newGuarduim.Spec.Failures >= newGuarduim.Spec.Threshold {
+		log.Printf("User %s exceeded failure threshold. Blocking user...\n", newGuarduim.Spec.Username)
+		blockUser(newGuarduim.Metadata.Name, newGuarduim.Metadata.Namespace) // ✅ Fixed!
 	}
 }
 
