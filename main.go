@@ -19,7 +19,7 @@ import (
 
 // Define the GroupVersionResource for Guarduim
 var guarduimGVR = schema.GroupVersionResource{
-	Group:    "example.com",
+	Group:    "guarduim.example.com",
 	Version:  "v1",
 	Resource: "guarduims",
 }
