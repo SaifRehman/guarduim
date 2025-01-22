@@ -138,14 +138,22 @@ func processLogEntry(logEntry string) {
 }
 
 func extractUsernameFromLog(logEntry string) string {
-	// Extract the username from the log entry (customize based on actual log format)
-	// This assumes the log entry contains `"user":"username"`
-	if strings.Contains(logEntry, `"user":`) {
-		start := strings.Index(logEntry, `"user":`) + len(`"user":`)
-		end := strings.Index(logEntry[start:], `,`) + start
-		username := logEntry[start:end]
-		username = strings.Trim(username, `"`)
-		return username
+	if strings.Contains(logEntry, `"annotations":`) {
+		// Find the starting index of the annotations section
+		start := strings.Index(logEntry, `"annotations":{`) + len(`"annotations":{`)
+		// Find the closing brace of the annotations
+		end := strings.Index(logEntry[start:], `}}`) + start
+		annotations := logEntry[start:end]
+
+		// Check if the specific "authentication.openshift.io/username" key is present in the annotations
+		if strings.Contains(annotations, `"authentication.openshift.io/username":`) {
+			// Extract the username from the annotations string
+			usernameStart := strings.Index(annotations, `"authentication.openshift.io/username":`) + len(`"authentication.openshift.io/username":`)
+			usernameEnd := strings.Index(annotations[usernameStart:], `,"`) + usernameStart
+			username := annotations[usernameStart:usernameEnd]
+			username = strings.Trim(username, `"`)
+			return username
+		}
 	}
 	return ""
 }
