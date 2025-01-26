@@ -1,0 +1,68 @@
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
+)
+
+func main() {
+	// Open the log file
+	file, err := os.Open("log.txt") // Ensure the file exists
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Regular expression to extract the username
+	usernameRegex := regexp.MustCompile(`"authentication.openshift.io/username":"([^"]+)"`)
+
+	// Map to track authentication denials per user
+	userDenials := make(map[string]int)
+
+	// Read file line by line
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if "authentication.openshift.io/decision":"deny" is in the line
+		if strings.Contains(line, `"authentication.openshift.io/decision":"deny"`) {
+			// Extract the username
+			matches := usernameRegex.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				username := matches[1]
+				// Increment denial count for the user
+				userDenials[username]++
+			}
+		}
+	}
+
+	// Handle potential scanner errors
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error reading file:", err)
+		return
+	}
+
+	// Convert the map into a JSON array of dictionaries
+	var result []map[string]interface{}
+	for user, count := range userDenials {
+		result = append(result, map[string]interface{}{
+			"user":  user,
+			"count": count,
+		})
+	}
+
+	// Convert result to JSON
+	jsonOutput, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		fmt.Println("Error converting to JSON:", err)
+		return
+	}
+
+	// Print JSON output
+	fmt.Println(string(jsonOutput))
+}

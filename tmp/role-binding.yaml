@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: guarduim-rolebinding
+  namespace: guarduim
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: guarduim
+roleRef:
+  kind: Role
+  name: guarduim-role
+  apiGroup: rbac.authorization.k8s.io

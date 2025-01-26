@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- guard_v1_guarduim.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

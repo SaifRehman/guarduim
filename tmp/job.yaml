@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-users-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: create-users
+          image: httpd:alpine # This image has the htpasswd utility
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              HTPASSWD_FILE="/tmp/htpasswd"
+              # Create the htpasswd file if it does not exist
+              if [ ! -f "$HTPASSWD_FILE" ]; then
+                touch "$HTPASSWD_FILE"
+              fi
+
+              # Create 20 users with username user1 to user20
+              for i in {1..20}; do
+                username="user$i"
+                # Check if the user already exists
+                if ! grep -q "^$username:" "$HTPASSWD_FILE"; then
+                  # Create the user with password 'password' and add it to the htpasswd file
+                  htpasswd -b "$HTPASSWD_FILE" "$username" "password"
+                  echo "Created user: $username"
+                else
+                  echo "User $username already exists"
+                fi
+              done
+              # Optionally, print the file contents to verify
+              cat "$HTPASSWD_FILE"
+          volumeMounts:
+            - name: htpasswd-volume
+              mountPath: /tmp
+      restartPolicy: OnFailure
+      volumes:
+        - name: htpasswd-volume
+          emptyDir: {}
+  backoffLimit: 4

@@ -1,38 +1,33 @@
-# Use Go base image
-FROM golang:1.23 as builder
+# Build the manager binary
+FROM docker.io/golang:1.23 AS builder
+ARG TARGETOS
+ARG TARGETARCH
 
-# Set the Current Working Directory inside the container
-WORKDIR /app
-
+WORKDIR /workspace
 # Copy the Go Modules manifests
-COPY go.mod go.sum ./
+COPY go.mod go.mod
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
 
-# Copy the source code into the container
-COPY . .
+# Copy the go source
+COPY cmd/main.go cmd/main.go
+COPY api/ api/
+COPY internal/ internal/
 
-# Build the Go app without running go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o guarduim-controller .
+# Build
+# the GOARCH has not a default value to allow the binary be built according to the host where the command
+# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
+# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
+# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-# Start a new stage from scratch
-FROM debian:bullseye-slim
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM gcr.io/distroless/static:nonroot
+WORKDIR /
+COPY --from=builder /workspace/manager .
+USER 65532:65532
 
-# Install necessary packages including `oc` client and `file` utility
-RUN apt-get update && apt-get install -y ca-certificates curl file \
-    && curl -Lo /tmp/oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz \
-    && ls -l /tmp/oc.tar.gz \
-    && file /tmp/oc.tar.gz \
-    && tar -xvzf /tmp/oc.tar.gz -C /usr/local/bin \
-    && rm -f /tmp/oc.tar.gz
-
-# Set the Current Working Directory inside the container
-WORKDIR /root/
-
-# Copy the Pre-built binary file from the previous stage
-COPY --from=builder /app/guarduim-controller .
-
-# Expose the port the app runs on (if necessary)
-EXPOSE 8080
-RUN chmod +x guarduim-controller
-
-# Command to run the executable
-CMD ["./guarduim-controller"]
+ENTRYPOINT ["/manager"]

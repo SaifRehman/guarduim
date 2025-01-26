@@ -1,0 +1,17 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: guarduim-controller-role
+rules:
+  - apiGroups: ["guard.example.com"]  # API group of the CRD
+    resources: ["guarduims"]             # The resource we want access to
+    verbs: ["get", "list", "watch", "create", "update", "delete"]  # The allowed actions
+  - apiGroups: ["guard.example.com"]
+    resources: ["guarduims/status"]
+    verbs: ["get", "update", "patch"]  # Allow updating the status subresource
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]

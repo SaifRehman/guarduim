@@ -1,0 +1,8 @@
+apiVersion: guard.example.com/v1
+kind: Guarduim
+metadata:
+  name: for-user5
+  namespace: guarduim
+spec:
+  username: user5
+  threshold: 5

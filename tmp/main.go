@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -84,7 +86,7 @@ func main() {
 
 	// Periodically check for audit log entries
 	go func() {
-		ticker := time.NewTicker(5 * time.Second) // Set to 30 seconds or any other interval
+		ticker := time.NewTicker(30 * time.Second) // Set to 30 seconds or any other interval
 		defer ticker.Stop()
 
 		for {
@@ -144,7 +146,6 @@ func extractUsernameFromLog(logEntry string) string {
 		// Find the closing brace of the annotations
 		end := strings.Index(logEntry[start:], `}}`) + start
 		annotations := logEntry[start:end]
-
 		// Check if the specific "authentication.openshift.io/username" key is present in the annotations
 		if strings.Contains(annotations, `"authentication.openshift.io/username":`) {
 			// Extract the username from the annotations string
@@ -341,7 +342,25 @@ func blockUser(username, namespace string) {
 }
 
 func getNamespace() (string, error) {
-	// Assume the namespace is 'default' for now
-	// You can dynamically fetch namespace if required using Kubernetes APIs
-	return "guarduim", nil
+	// The namespace is stored in this file in Kubernetes
+	namespaceFile := "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	file, err := os.Open(namespaceFile)
+	if err != nil {
+		return "", fmt.Errorf("could not open namespace file: %v", err)
+	}
+	defer file.Close()
+
+	// Read the namespace from the file
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		namespace := scanner.Text()
+		log.Printf("Fetched namespace: %s\n", namespace) // Log to verify
+		return namespace, nil
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading namespace file: %v", err)
+	}
+
+	// Return error if we couldn't read the namespace
+	return "", fmt.Errorf("namespace not found")
 }
