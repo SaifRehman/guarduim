@@ -204,7 +204,7 @@ func main() {
 
 	if err = (&controller.GuarduimReconciler{
 		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Scheme: mgr.GetScheme(), // Ensure it is set
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Guarduim")
 		os.Exit(1)

@@ -1,8 +1,21 @@
 # guarduim
-// TODO(user): Add simple overview of use/purpose
+Guarduim is a Kubernetes custom controller that monitors authentication failures in an OpenShift cluster. It tracks authentication events from OpenShift's OAuth server logs and updates the status of a custom resource definition (CRD) based on user-defined thresholds. This project helps administrators enforce security policies by tracking and blocking users after multiple failed authentication attempts.
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+## Features
+
+- Monitors authentication failures for a specific user.
+- Tracks the failure count based on logs from the OpenShift OAuth server.
+- Blocks users when the failure count exceeds a user-defined threshold.
+- Automatically retries the log check every 30 seconds.
+- Integrates with the Kubernetes ecosystem via a custom CRD.
+
+## Prerequisites
+
+- Kubernetes 1.21+ (or OpenShift 4.x+)
+- Go 1.16+
+- `oc` CLI installed and configured to access your OpenShift cluster
+- Kubebuilder for creating and managing the controller
+- Docker for building container images (if deploying the controller as a container)
 
 ## Getting Started
 
