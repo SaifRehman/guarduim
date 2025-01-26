@@ -1,0 +1,8 @@
+apiVersion: guard.guarduim.com/v1
+kind: Guarduim
+metadata:
+  name: test-user
+  namespace: guarduim
+spec:
+  username: admin
+  threshold: 5

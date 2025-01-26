@@ -1,9 +1,0 @@
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: guarduim
-  name: guarduim-role
-rules:
-- apiGroups: ["guarduim.example.com"]
-  resources: ["guarduims"]
-  verbs: ["get", "list", "watch", "create", "update", "delete"]
